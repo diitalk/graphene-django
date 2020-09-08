@@ -1,5 +1,6 @@
 import warnings
 from collections import OrderedDict
+from functools import partial
 
 import six
 from django.db.models import Model
@@ -133,6 +134,18 @@ def validate_fields(type_, model, fields, only_fields, exclude_fields):
                 )
 
 
+class DjangoModelField(Field):
+
+    @staticmethod
+    def model_resolver(django_object_type, resolver, root, info, **args):
+        return django_object_type.get_node(info, getattr(root, info.field_name).pk)
+
+    def get_resolver(self, parent_resolver):
+        if isinstance(self.type, type) and issubclass(self.type, DjangoObjectType):
+            return partial(self.model_resolver, self.type, parent_resolver)
+        return super().get_resolver(parent_resolver)
+
+
 class DjangoObjectTypeOptions(ObjectTypeOptions):
     model = None  # type: Model
     registry = None  # type: Registry
@@ -225,7 +238,7 @@ class DjangoObjectType(ObjectType):
 
         django_fields = yank_fields_from_attrs(
             construct_fields(model, registry, fields, exclude, convert_choices_to_enum),
-            _as=Field,
+            _as=DjangoModelField,
         )
 
         if use_connection is None and interfaces:
